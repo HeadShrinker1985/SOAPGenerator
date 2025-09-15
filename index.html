@@ -779,8 +779,9 @@
             attachEventListeners() {
                 const mainContent = document.getElementById('main-content');
                 mainContent.addEventListener('input', this.handleInput.bind(this));
-                mainContent.addEventListener('change', this.handleInput.bind(this)); // For checkboxes/selects
+                mainContent.addEventListener('change', this.handleInput.bind(this));
                 mainContent.addEventListener('click', this.handleClick.bind(this));
+                mainContent.addEventListener('keyup', this.handleKeyUp.bind(this));
                 mainContent.addEventListener('focusin', e => { this.lastFocusedElement = e.target; });
                 
                 mainContent.addEventListener('keydown', (e) => {
@@ -835,8 +836,19 @@
                 document.getElementById('export-txt-btn').addEventListener('click', this.exportTxt.bind(this));
             },
 
+            handleKeyUp(e) {
+                if (e.target.matches('.bullet-tool-textarea')) {
+                    this._enforceBulletCursor(e.target);
+                }
+            },
+
             handleClick(e) {
                 const { target } = e;
+
+                 if (target.matches('.bullet-tool-textarea')) {
+                    this._enforceBulletCursor(target);
+                }
+
                 const button = target.closest('button');
                 const menuItem = target.closest('.tool-dropdown-menu a');
 
@@ -905,6 +917,15 @@
                 }
             },
             
+            _enforceBulletCursor(textarea) {
+                const pos = textarea.selectionStart;
+                const val = textarea.value;
+                const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+                if (pos < lineStart + 2) {
+                    textarea.selectionStart = textarea.selectionEnd = lineStart + 2;
+                }
+            },
+
             handleInput(e) {
                 const { target } = e;
                 const toolEl = target.closest('[data-tool-id]');
@@ -918,15 +939,14 @@
                 
                 let needsFullRender = false;
 
-                // --- Update state based on input ---
                 if (target.isContentEditable) {
-                    if (target.matches('h4')) {
+                    if (target.matches('h2')) {
+                        const section = newState.sections.find(s => s.id === sectionEl.dataset.sectionId);
+                        if(section) section.title = target.textContent;
+                    } else if (target.matches('h4')) {
                         const ivSectionCard = target.closest('.iv-section-card[data-iv-section-id]');
                         const ivSection = tool.ivSections.find(s => s.id === ivSectionCard.dataset.ivSectionId);
                         if (ivSection) ivSection.title = target.textContent;
-                    } else if (target.matches('h2')) {
-                        const section = newState.sections.find(s => s.id === sectionEl.dataset.sectionId);
-                        if(section) section.title = target.textContent;
                     } else {
                          const itemLi = target.closest('li[data-item-id]');
                          const ivSectionCard = target.closest('.iv-section-card[data-iv-section-id]');
@@ -981,7 +1001,7 @@
                                 tool.customValues[prop.replace('-custom', '')] = value;
                             } else if (target.tagName === 'SELECT') {
                                 tool.values[prop] = value;
-                                needsFullRender = true; // This needs a re-render to show/hide the custom field
+                                needsFullRender = true;
                             }
                             break;
                     }
@@ -1009,22 +1029,16 @@
             },
 
             clearAllContent() {
-                if (!confirm("Are you sure you want to clear all text input and checked items? This cannot be undone.")) return;
-
                 const newState = JSON.parse(JSON.stringify(store.state));
-                
                 newState.sections.forEach(section => {
                     section.tools.forEach(tool => {
                         const defaultTool = this.createToolObject(tool.type);
-                        
                         if (tool.hasOwnProperty('text')) tool.text = defaultTool.text;
                         if (tool.hasOwnProperty('values')) tool.values = defaultTool.values;
                         if (tool.hasOwnProperty('customValues')) tool.customValues = defaultTool.customValues;
-                        
                         if (tool.type === 'Short Text Fields') {
                             tool.fields.forEach(field => field.value = '');
                         }
-
                         if (tool.type === 'Interventions') {
                             tool.ivSections.forEach(ivSec => {
                                 ivSec.items.forEach(item => item.checked = false);
@@ -1032,7 +1046,6 @@
                         }
                     });
                 });
-
                 store.setState(newState);
                 utils.showToast("All content cleared!");
             },
