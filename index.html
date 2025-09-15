@@ -105,6 +105,9 @@
                 <button id="add-section-btn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
                     <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Section
                 </button>
+                 <button id="clear-content-btn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-red-600 rounded-md shadow-sm hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600">
+                    <i data-lucide="trash" class="w-4 h-4"></i> Clear Content
+                </button>
                 <button id="import-btn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
                     <i data-lucide="upload" class="w-4 h-4"></i> Import
                 </button>
@@ -198,6 +201,14 @@
             },
             generateHourOptions: () => Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}</option>`).join(''),
             generateMinuteOptions: () => Array.from({length: 60}, (_, i) => `<option value="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</option>`).join(''),
+             convert12to24(hour, minute, ampm) {
+                if (!hour || !minute || !ampm) return '';
+                hour = parseInt(hour, 10);
+                minute = String(minute).padStart(2, '0');
+                if (ampm === 'PM' && hour !== 12) hour += 12;
+                if (ampm === 'AM' && hour === 12) hour = 0;
+                return `${String(hour).padStart(2, '0')}:${minute}`;
+            },
         };
 
         // --- STATE MANAGEMENT ---
@@ -513,17 +524,17 @@
                             <div>
                                 <label class="font-semibold">Session Start Time</label>
                                 <div class="flex gap-1">
-                                    <select class="${inputClasses}" data-prop="startTimeHour">${this.hourOptions}</select>
-                                    <select class="${inputClasses}" data-prop="startTimeMinute">${this.minuteOptions}</select>
-                                    <select class="${inputClasses}" data-prop="startTimeAmPm"><option>AM</option><option>PM</option></select>
+                                    <select class="${inputClasses}" data-prop="startTimeHour"><option value="" disabled selected>Hour</option>${this.hourOptions}</select>
+                                    <select class="${inputClasses}" data-prop="startTimeMinute"><option value="" disabled selected>Min</option>${this.minuteOptions}</select>
+                                    <select class="${inputClasses}" data-prop="startTimeAmPm"><option value="" disabled selected>AM/PM</option><option>AM</option><option>PM</option></select>
                                 </div>
                             </div>
                             <div>
                                 <label class="font-semibold">Session End Time</label>
                                 <div class="flex gap-1">
-                                    <select class="${inputClasses}" data-prop="endTimeHour">${this.hourOptions}</select>
-                                    <select class="${inputClasses}" data-prop="endTimeMinute">${this.minuteOptions}</select>
-                                    <select class="${inputClasses}" data-prop="endTimeAmPm"><option>AM</option><option>PM</option></select>
+                                    <select class="${inputClasses}" data-prop="endTimeHour"><option value="" disabled selected>Hour</option>${this.hourOptions}</select>
+                                    <select class="${inputClasses}" data-prop="endTimeMinute"><option value="" disabled selected>Min</option>${this.minuteOptions}</select>
+                                    <select class="${inputClasses}" data-prop="endTimeAmPm"><option value="" disabled selected>AM/PM</option><option>AM</option><option>PM</option></select>
                                 </div>
                             </div>
                             <div class="md:col-span-2">
@@ -531,12 +542,12 @@
                                 <span class="duration-display p-2 block bg-gray-100 dark:bg-gray-900 rounded-md">${ci_duration || 'N/A'}</span>
                             </div>
                         </div>`;
-                        contentEl.querySelector('[data-prop="startTimeHour"]').value = ci.startTimeHour || '9';
-                        contentEl.querySelector('[data-prop="startTimeMinute"]').value = ci.startTimeMinute || '00';
-                        contentEl.querySelector('[data-prop="startTimeAmPm"]').value = ci.startTimeAmPm || 'AM';
-                        contentEl.querySelector('[data-prop="endTimeHour"]').value = ci.endTimeHour || '9';
-                        contentEl.querySelector('[data-prop="endTimeMinute"]').value = ci.endTimeMinute || '45';
-                        contentEl.querySelector('[data-prop="endTimeAmPm"]').value = ci.endTimeAmPm || 'AM';
+                        contentEl.querySelector('[data-prop="startTimeHour"]').value = ci.startTimeHour || '';
+                        contentEl.querySelector('[data-prop="startTimeMinute"]').value = ci.startTimeMinute || '';
+                        contentEl.querySelector('[data-prop="startTimeAmPm"]').value = ci.startTimeAmPm || '';
+                        contentEl.querySelector('[data-prop="endTimeHour"]').value = ci.endTimeHour || '';
+                        contentEl.querySelector('[data-prop="endTimeMinute"]').value = ci.endTimeMinute || '';
+                        contentEl.querySelector('[data-prop="endTimeAmPm"]').value = ci.endTimeAmPm || '';
                         break;
                     case 'Mental Status Exam':
                         const allNormalCheckboxId = `mse-all-normal-${tool.id}`;
@@ -623,10 +634,9 @@
                         content = (tool.text || '').trim();
                         break;
                     case 'Bulleted Notes':
-                        // The text in the state already contains bullets, so we just clean it up.
                         content = (tool.text || '').split('\n')
                             .map(line => line.trim())
-                            .filter(line => line && line !== '•') // Filter out empty lines or lines with only a bullet
+                            .filter(line => line && line !== '•')
                             .join('\n');
                         break;
                     case 'Short Text Fields':
@@ -640,7 +650,6 @@
                             .map(section => {
                                 const checkedItems = section.items.filter(item => item.checked && item.text.trim());
                                 if (checkedItems.length === 0) return '';
-                                // Format with bullets for the final note
                                 const itemsText = checkedItems.map(item => `• ${item.text.trim()}`).join('\n');
                                 return `${section.title}:\n${itemsText}`;
                             })
@@ -773,41 +782,33 @@
                 mainContent.addEventListener('change', this.handleInput.bind(this)); // For checkboxes/selects
                 mainContent.addEventListener('click', this.handleClick.bind(this));
                 mainContent.addEventListener('focusin', e => { this.lastFocusedElement = e.target; });
-                mainContent.addEventListener('focusout', this.handleBlur.bind(this));
                 
                 mainContent.addEventListener('keydown', (e) => {
                     const toolEl = e.target.closest('[data-tool-id]');
                     if (!toolEl) return;
                     
-                    // Intervention: Add item on Enter
                     if (e.key === 'Enter' && e.target.classList.contains('add-iv-item-input')) {
                         e.preventDefault();
-                        e.target.nextElementSibling.click(); // Click the '+' button
+                        e.target.nextElementSibling.click(); 
                     }
 
-                    // Bulleted Notes: Add new bullet on Enter
                     if (e.target.matches(".bullet-tool-textarea")) {
                         const sectionEl = toolEl.closest('[data-section-id]');
                         const tool = this.findToolById(store.state, toolEl.dataset.toolId, sectionEl.dataset.sectionId);
 
-                        if (tool && tool.type === 'Bulleted Notes') {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                const target = e.target;
-                                const start = target.selectionStart;
-                                const end = target.selectionEnd;
-                                const value = target.value;
-                                target.value = value.substring(0, start) + '\n• ' + value.substring(end);
-                                target.selectionStart = target.selectionEnd = start + 3; // "• " is 3 chars
-                                target.dispatchEvent(new Event('input', { bubbles: true })); // Trigger update
-                            }
+                        if (tool && tool.type === 'Bulleted Notes' && e.key === 'Enter') {
+                            e.preventDefault();
+                            const target = e.target;
+                            const { selectionStart, selectionEnd, value } = target;
+                            target.value = `${value.substring(0, selectionStart)}\n• ${value.substring(selectionEnd)}`;
+                            target.selectionStart = target.selectionEnd = selectionStart + 3;
+                            target.dispatchEvent(new Event('input', { bubbles: true }));
                         }
                     }
 
-                    // Save contenteditable on Enter
                     if (e.target.isContentEditable && e.key === 'Enter') {
-                        e.preventDefault(); // Prevent new line
-                        e.target.blur();    // Trigger focusout to save
+                        e.preventDefault();
+                        e.target.blur();
                     }
                 });
                 
@@ -820,6 +821,7 @@
 
                 // Header
                 document.getElementById('add-section-btn').addEventListener('click', this.addSection.bind(this));
+                document.getElementById('clear-content-btn').addEventListener('click', this.clearAllContent.bind(this));
                 document.getElementById('theme-toggle-btn').addEventListener('click', this.toggleTheme.bind(this));
                 document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file-input').click());
                 document.getElementById('import-file-input').addEventListener('change', this.importConfig.bind(this));
@@ -832,178 +834,170 @@
                 document.getElementById('copy-note-btn').addEventListener('click', this.copyNote.bind(this));
                 document.getElementById('export-txt-btn').addEventListener('click', this.exportTxt.bind(this));
             },
-            
-            handleBlur(e) {
-                this.handleTitleEdit(e); // Handle section titles
-                if (e.target.closest('.iv-section-card')) {
-                    this.handleInterventionEdit(e); // Handle intervention edits
-                }
-            },
 
             handleClick(e) {
-                const button = e.target.closest('button');
-                if (!button) {
-                    const menuItem = e.target.closest('.tool-dropdown-menu a');
-                     if (menuItem) {
-                        e.preventDefault();
-                        this.addTool(menuItem.dataset.toolType, parseInt(menuItem.dataset.sectionIndex));
-                        menuItem.closest('.tool-dropdown-menu').remove();
-                    }
+                const { target } = e;
+                const button = target.closest('button');
+                const menuItem = target.closest('.tool-dropdown-menu a');
+
+                if (menuItem) {
+                    e.preventDefault();
+                    this.addTool(menuItem.dataset.toolType, parseInt(menuItem.dataset.sectionIndex, 10));
+                    menuItem.closest('.tool-dropdown-menu').remove();
                     return;
-                };
+                }
+
+                if (!button) return;
 
                 const sectionEl = button.closest('[data-section-id]');
                 const toolEl = button.closest('[data-tool-id]');
+                const sectionId = sectionEl ? sectionEl.dataset.sectionId : null;
+                const toolId = toolEl ? toolEl.dataset.toolId : null;
 
-                // Section controls
-                if (button.classList.contains('remove-section') && sectionEl) this.removeSection(sectionEl.dataset.sectionId);
-                if (button.classList.contains('toggle-collapse') && sectionEl) this.toggleSectionCollapse(sectionEl.dataset.sectionId);
-                if (button.classList.contains('toggle-title-output') && sectionEl) this.toggleSectionTitleOutput(sectionEl.dataset.sectionId);
-
-                // Add tool menu
-                if (button.classList.contains('add-tool-btn') && sectionEl) {
-                    const sectionIndex = this.findIndexById(store.state.sections, sectionEl.dataset.sectionId);
-                    renderer.renderToolMenu(button, sectionIndex);
-                }
+                const actionMap = {
+                    '.remove-section': () => this.removeSection(sectionId),
+                    '.toggle-collapse': () => this.toggleSectionCollapse(sectionId),
+                    '.toggle-title-output': () => this.toggleSectionTitleOutput(sectionId),
+                    '.add-tool-btn': () => renderer.renderToolMenu(button, this.findIndexById(store.state.sections, sectionId)),
+                    '.remove-tool': () => this.removeTool(toolId, sectionId),
+                    '.duplicate-tool': () => this.duplicateTool(toolId, sectionId),
+                    '.add-short-text-field': () => this.addShortTextField(toolId, sectionId),
+                    '.reset-iv-tool': () => this.resetInterventions(toolId, sectionId),
+                    '.add-iv-section': () => this.addInterventionSection(toolId, sectionId),
+                    '.remove-short-text-field': () => {
+                        const fieldEl = button.closest('[data-field-index]');
+                        if (fieldEl) this.removeShortTextField(fieldEl.dataset.fieldIndex, toolId, sectionId);
+                    },
+                    '.remove-iv-section': () => {
+                        const ivCard = button.closest('.iv-section-card[data-iv-section-id]');
+                        if (ivCard) this.removeInterventionSection(ivCard.dataset.ivSectionId, toolId, sectionId);
+                    },
+                    '.move-iv-section-up': () => {
+                        const ivCard = button.closest('.iv-section-card[data-iv-section-id]');
+                        if (ivCard) this.moveInterventionSection(ivCard.dataset.ivSectionId, toolId, sectionId, -1);
+                    },
+                    '.move-iv-section-down': () => {
+                        const ivCard = button.closest('.iv-section-card[data-iv-section-id]');
+                        if (ivCard) this.moveInterventionSection(ivCard.dataset.ivSectionId, toolId, sectionId, 1);
+                    },
+                    '.add-iv-item-btn': () => {
+                        const ivCard = button.closest('.iv-section-card[data-iv-section-id]');
+                        if (ivCard) {
+                            const input = button.previousElementSibling;
+                            this.addInterventionItem(ivCard.dataset.ivSectionId, toolId, sectionId, input.value);
+                            input.value = '';
+                        }
+                    },
+                     '.remove-iv-item': () => {
+                        const ivItem = button.closest('li[data-item-id]');
+                        const ivCard = button.closest('.iv-section-card[data-iv-section-id]');
+                        if (ivItem && ivCard) {
+                           this.removeInterventionItem(ivItem.dataset.itemId, ivCard.dataset.ivSectionId, toolId, sectionId);
+                        }
+                    }
+                };
                 
-                // Tool controls
-                if (toolEl && sectionEl) {
-                    const toolId = toolEl.dataset.toolId;
-                    const sectionId = sectionEl.dataset.sectionId;
-                    if (button.classList.contains('remove-tool')) this.removeTool(toolId, sectionId);
-                    if (button.classList.contains('duplicate-tool')) this.duplicateTool(toolId, sectionId);
-                    if (button.classList.contains('add-short-text-field')) this.addShortTextField(toolId, sectionId);
-                    if (button.classList.contains('remove-short-text-field')) {
-                        const fieldIndex = button.closest('[data-field-index]').dataset.fieldIndex;
-                        this.removeShortTextField(fieldIndex, toolId, sectionId);
-                    }
-                    if (button.classList.contains('add-iv-section')) this.addInterventionSection(toolId, sectionId);
-                    if (button.classList.contains('reset-iv-tool')) this.resetInterventions(toolId, sectionId);
-                }
-
-                // Intervention-specific controls (require more specific element context)
-                const ivSectionCard = button.closest('.iv-section-card');
-                if (ivSectionCard && toolEl && sectionEl) {
-                    const toolId = toolEl.dataset.toolId;
-                    const sectionId = sectionEl.dataset.sectionId;
-                    const ivSectionId = ivSectionCard.dataset.ivSectionId;
-                    
-                    if (button.classList.contains('remove-iv-section')) this.removeInterventionSection(ivSectionId, toolId, sectionId);
-                    if (button.classList.contains('move-iv-section-up')) this.moveInterventionSection(ivSectionId, toolId, sectionId, -1);
-                    if (button.classList.contains('move-iv-section-down')) this.moveInterventionSection(ivSectionId, toolId, sectionId, 1);
-                    if (button.classList.contains('add-iv-item-btn')) {
-                        const input = button.previousElementSibling;
-                        this.addInterventionItem(ivSectionId, toolId, sectionId, input.value);
-                        input.value = ''; // Clear input after adding
-                    }
-                    
-                    const ivItem = button.closest('li[data-item-id]');
-                    if (ivItem && button.classList.contains('remove-iv-item')) {
-                        this.removeInterventionItem(ivItem.dataset.itemId, ivSectionId, toolId, sectionId);
+                for (const selector in actionMap) {
+                    if (button.matches(selector)) {
+                        actionMap[selector]();
+                        break;
                     }
                 }
-            },
-            
-            convert12to24(hour, minute, ampm) {
-                hour = parseInt(hour, 10);
-                minute = String(minute).padStart(2, '0');
-                if (ampm === 'PM' && hour !== 12) hour += 12;
-                if (ampm === 'AM' && hour === 12) hour = 0;
-                return `${String(hour).padStart(2, '0')}:${minute}`;
             },
             
             handleInput(e) {
-                if (e.target.classList.contains('mse-all-normal-checkbox')) {
-                    const toolEl = e.target.closest('[data-tool-id]');
-                    const sectionEl = toolEl.closest('[data-section-id]');
-                    if (e.target.checked) this.setMseToNormal(toolEl.dataset.toolId, sectionEl.dataset.sectionId);
-                    return;
-                }
-
-                const toolEl = e.target.closest('[data-tool-id]');
+                const { target } = e;
+                const toolEl = target.closest('[data-tool-id]');
                 if (!toolEl) return;
-                
-                const sectionEl = toolEl.closest('[data-section-id]'); 
+                const sectionEl = toolEl.closest('[data-section-id]');
                 if (!sectionEl) return;
-                
-                const sectionIndex = this.findIndexById(store.state.sections, sectionEl.dataset.sectionId);
-                if (sectionIndex === -1) return;
-                
-                const toolIndex = this.findIndexById(store.state.sections[sectionIndex].tools, toolEl.dataset.toolId);
-                if (toolIndex === -1) return;
-                
-                const isSimpleInput = e.type === 'input' && (e.target.tagName === 'TEXTAREA' || (e.target.tagName === 'INPUT' && ['text', 'date'].includes(e.target.type)));
 
                 const newState = JSON.parse(JSON.stringify(store.state));
-                const tool = newState.sections[sectionIndex].tools[toolIndex];
-                const prop = e.target.dataset.prop;
-
-                switch(tool.type) {
-                    case 'Paragraph':
-                    case 'Bulleted Notes':
-                    case 'Short Text Fields':
-                        if (prop === 'title') tool.title = e.target.value;
-                        else if (prop === 'showTitleInOutput') tool.showTitleInOutput = e.target.checked;
-                        else if (tool.type === 'Bulleted Notes' || tool.type === 'Paragraph') {
-                            tool.text = e.target.value;
-                        } else if (tool.type === 'Short Text Fields') {
-                            const fieldIndex = parseInt(e.target.closest('[data-field-index]').dataset.fieldIndex);
-                            tool.fields[fieldIndex][prop] = e.target.value;
-                        }
-                        break;
-                    case 'Interventions':
-                        if (e.target.matches('input[type="checkbox"]')) {
-                            const itemEl = e.target.closest('[data-item-id]');
-                            const sectionCardEl = e.target.closest('.iv-section-card[data-iv-section-id]');
-                            if(itemEl && sectionCardEl && tool.ivSections) {
-                                const ivSection = tool.ivSections.find(s => s.id === sectionCardEl.dataset.ivSectionId);
-                                if(ivSection) {
-                                    const item = ivSection.items.find(i => i.id === itemEl.dataset.itemId);
-                                    if(item) item.checked = e.target.checked;
-                                }
-                            }
-                        }
-                        break;
-                    case 'Risk Safety':
-                        if (!tool.values) tool.values = {};
-                        if(e.target.type === 'checkbox') tool.values[prop] = e.target.checked;
-                        else tool.values[prop] = e.target.value;
-                        break;
-                    case 'Client Information':
-                        if (!tool.values) tool.values = {};
-                        tool.values[prop] = e.target.value;
-                        tool.values.startTime = this.convert12to24(tool.values.startTimeHour, tool.values.startTimeMinute, tool.values.startTimeAmPm);
-                        tool.values.endTime = this.convert12to24(tool.values.endTimeHour, tool.values.endTimeMinute, tool.values.endTimeAmPm);
-                        break;
-                    case 'Signature':
-                        if (!tool.values) tool.values = {};
-                        tool.values[prop] = e.target.value;
-                        break;
-                    case 'Mental Status Exam':
-                        if (!tool.values) tool.values = {};
-                        if (!tool.customValues) tool.customValues = {};
-                        if (prop.endsWith('-custom')) {
-                            const baseProp = prop.replace('-custom', '');
-                            tool.customValues[baseProp] = e.target.value;
-                        } else if (e.target.tagName === 'SELECT') {
-                            tool.values[prop] = e.target.value;
-                        }
-                        break;
-                    default:
-                        tool[prop] = e.target.value;
-                }
+                const tool = this.findToolById(newState, toolEl.dataset.toolId, sectionEl.dataset.sectionId);
+                if (!tool) return;
                 
-                if (isSimpleInput || e.target.tagName === 'SELECT' || e.target.type === 'checkbox') {
-                    store.setState(newState, { publish: false });
-                    if (tool.type === 'Client Information') {
-                         const durationEl = toolEl.querySelector('.duration-display');
-                         if (durationEl) {
-                             durationEl.textContent = utils.calculateDuration(tool.values.dos, tool.values.startTime, tool.values.endTime) || 'N/A';
+                let needsFullRender = false;
+
+                // --- Update state based on input ---
+                if (target.isContentEditable) {
+                    if (target.matches('h4')) {
+                        const ivSectionCard = target.closest('.iv-section-card[data-iv-section-id]');
+                        const ivSection = tool.ivSections.find(s => s.id === ivSectionCard.dataset.ivSectionId);
+                        if (ivSection) ivSection.title = target.textContent;
+                    } else if (target.matches('h2')) {
+                        const section = newState.sections.find(s => s.id === sectionEl.dataset.sectionId);
+                        if(section) section.title = target.textContent;
+                    } else {
+                         const itemLi = target.closest('li[data-item-id]');
+                         const ivSectionCard = target.closest('.iv-section-card[data-iv-section-id]');
+                         if(itemLi && ivSectionCard){
+                            const ivSection = tool.ivSections.find(s => s.id === ivSectionCard.dataset.ivSectionId);
+                            const item = ivSection?.items.find(i => i.id === itemLi.dataset.itemId);
+                            if(item) item.text = target.textContent;
                          }
                     }
-                    renderer.renderFinalNote(store.state);
                 } else {
+                    const prop = target.dataset.prop;
+                    const value = target.type === 'checkbox' ? target.checked : target.value;
+                    switch(tool.type) {
+                         case 'Paragraph':
+                         case 'Bulleted Notes':
+                             if (prop === 'title') tool.title = value;
+                             else if (prop === 'showTitleInOutput') tool.showTitleInOutput = value;
+                             else if (prop === 'text') tool.text = value;
+                             break;
+                         case 'Short Text Fields':
+                             if (prop === 'title') tool.title = value;
+                             else if (prop === 'showTitleInOutput') tool.showTitleInOutput = value;
+                             else {
+                                 const fieldIndex = parseInt(target.closest('[data-field-index]').dataset.fieldIndex, 10);
+                                 tool.fields[fieldIndex][prop] = value;
+                             }
+                             break;
+                        case 'Interventions':
+                            if (target.matches('input[type="checkbox"]')) {
+                                const itemEl = target.closest('[data-item-id]');
+                                const sectionCardEl = target.closest('.iv-section-card[data-iv-section-id]');
+                                const ivSection = tool.ivSections.find(s => s.id === sectionCardEl.dataset.ivSectionId);
+                                const item = ivSection.items.find(i => i.id === itemEl.dataset.itemId);
+                                if(item) item.checked = value;
+                            }
+                            break;
+                        case 'Risk Safety':
+                        case 'Signature':
+                            if (!tool.values) tool.values = {};
+                            tool.values[prop] = value;
+                            break;
+                        case 'Client Information':
+                            if (!tool.values) tool.values = {};
+                            tool.values[prop] = value;
+                            tool.values.startTime = utils.convert12to24(tool.values.startTimeHour, tool.values.startTimeMinute, tool.values.startTimeAmPm);
+                            tool.values.endTime = utils.convert12to24(tool.values.endTimeHour, tool.values.endTimeMinute, tool.values.endTimeAmPm);
+                            break;
+                        case 'Mental Status Exam':
+                            if (!tool.values) tool.values = {};
+                            if (!tool.customValues) tool.customValues = {};
+                            if (prop.endsWith('-custom')) {
+                                tool.customValues[prop.replace('-custom', '')] = value;
+                            } else if (target.tagName === 'SELECT') {
+                                tool.values[prop] = value;
+                                needsFullRender = true; // This needs a re-render to show/hide the custom field
+                            }
+                            break;
+                    }
+                }
+                
+                if (needsFullRender) {
                     store.setState(newState);
+                } else {
+                    store.setState(newState, { publish: false });
+                    renderer.renderFinalNote(store.state);
+                    if (tool.type === 'Client Information') {
+                        const durationDisplay = toolEl.querySelector('.duration-display');
+                        if (durationDisplay) {
+                            durationDisplay.textContent = utils.calculateDuration(tool.values.dos, tool.values.startTime, tool.values.endTime) || 'N/A';
+                        }
+                    }
                 }
             },
 
@@ -1013,9 +1007,37 @@
                 newState.sections.push({ id: utils.uuid(), title: title.trim(), showTitleInOutput: true, tools: [], isCollapsed: false });
                 store.setState(newState);
             },
+
+            clearAllContent() {
+                if (!confirm("Are you sure you want to clear all text input and checked items? This cannot be undone.")) return;
+
+                const newState = JSON.parse(JSON.stringify(store.state));
+                
+                newState.sections.forEach(section => {
+                    section.tools.forEach(tool => {
+                        const defaultTool = this.createToolObject(tool.type);
+                        
+                        if (tool.hasOwnProperty('text')) tool.text = defaultTool.text;
+                        if (tool.hasOwnProperty('values')) tool.values = defaultTool.values;
+                        if (tool.hasOwnProperty('customValues')) tool.customValues = defaultTool.customValues;
+                        
+                        if (tool.type === 'Short Text Fields') {
+                            tool.fields.forEach(field => field.value = '');
+                        }
+
+                        if (tool.type === 'Interventions') {
+                            tool.ivSections.forEach(ivSec => {
+                                ivSec.items.forEach(item => item.checked = false);
+                            });
+                        }
+                    });
+                });
+
+                store.setState(newState);
+                utils.showToast("All content cleared!");
+            },
             
             removeSection(sectionId) {
-                // Removed confirm() call for better user experience in iframe environments
                 const newState = { ...store.state };
                 newState.sections = newState.sections.filter(s => s.id !== sectionId);
                 store.setState(newState);
@@ -1024,7 +1046,7 @@
             toggleSectionCollapse(sectionId) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const section = newState.sections.find(s => s.id === sectionId);
-                section.isCollapsed = !section.isCollapsed;
+                if (section) section.isCollapsed = !section.isCollapsed;
                 store.setState(newState);
             },
 
@@ -1045,93 +1067,51 @@
             toggleSectionTitleOutput(sectionId) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const section = newState.sections.find(s => s.id === sectionId);
-                section.showTitleInOutput = !section.showTitleInOutput;
+                if (section) section.showTitleInOutput = !section.showTitleInOutput;
                 store.setState(newState);
-            },
-            
-            handleInterventionEdit(e) {
-                const editableEl = e.target;
-                const ivSectionCard = editableEl.closest('.iv-section-card[data-iv-section-id]');
-                if (!ivSectionCard) return;
-
-                const toolEl = ivSectionCard.closest('[data-tool-id]');
-                if (!toolEl) return;
-                
-                const mainSectionEl = toolEl.closest('[data-section-id]');
-                if (!mainSectionEl) return;
-
-                const newState = JSON.parse(JSON.stringify(store.state));
-                const tool = this.findToolById(newState, toolEl.dataset.toolId, mainSectionEl.dataset.sectionId);
-                if (!tool || tool.type !== 'Interventions' || !tool.ivSections) return;
-
-                const ivSectionId = ivSectionCard.dataset.ivSectionId;
-                const ivSection = tool.ivSections.find(s => s.id === ivSectionId);
-                if (!ivSection) return;
-
-                // Was it the title H4 that was edited?
-                if (editableEl.matches('h4')) {
-                    const newTitle = editableEl.textContent.trim();
-                    if (ivSection.title !== newTitle) {
-                        ivSection.title = newTitle;
-                        store.setState(newState);
-                    }
-                    return; // Done
-                }
-
-                // Was it an item DIV that was edited?
-                const itemLi = editableEl.closest('li[data-item-id]');
-                if (itemLi) {
-                    const itemId = itemLi.dataset.itemId;
-                    const item = ivSection.items.find(i => i.id === itemId);
-                    if (item) {
-                        const newText = editableEl.textContent.trim();
-                        if (item.text !== newText) {
-                            item.text = newText;
-                            store.setState(newState);
-                        }
-                    }
-                    return; // Done
-                }
             },
             
             addInterventionSection(toolId, sectionId) {
-                const title = "New Category"; // Removed prompt
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                if (!tool) return;
-                if (!tool.ivSections) tool.ivSections = [];
-                tool.ivSections.push({ id: utils.uuid(), title, items: [] });
-                store.setState(newState);
+                if (tool) {
+                    if (!tool.ivSections) tool.ivSections = [];
+                    tool.ivSections.push({ id: utils.uuid(), title: "New Category", items: [] });
+                    store.setState(newState);
+                }
             },
 
             resetInterventions(toolId, sectionId) {
-                // Removed confirm()
+                if (!confirm("Reset interventions to default list? This will remove custom categories and items.")) return;
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                if (!tool) return;
-                const defaultTool = this.createToolObject('Interventions');
-                tool.ivSections = defaultTool.ivSections;
-                store.setState(newState);
+                if (tool) {
+                    const defaultTool = this.createToolObject('Interventions');
+                    tool.ivSections = defaultTool.ivSections;
+                    store.setState(newState);
+                }
             },
 
             removeInterventionSection(ivSectionId, toolId, sectionId) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                if (!tool || !tool.ivSections) return;
-                tool.ivSections = tool.ivSections.filter(s => s.id !== ivSectionId);
-                store.setState(newState);
+                if (tool && tool.ivSections) {
+                    tool.ivSections = tool.ivSections.filter(s => s.id !== ivSectionId);
+                    store.setState(newState);
+                }
             },
             
             moveInterventionSection(ivSectionId, toolId, sectionId, direction) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                if (!tool || !tool.ivSections) return;
-                const index = tool.ivSections.findIndex(s => s.id === ivSectionId);
-                const newIndex = index + direction;
-                if (newIndex >= 0 && newIndex < tool.ivSections.length) {
-                    const [item] = tool.ivSections.splice(index, 1);
-                    tool.ivSections.splice(newIndex, 0, item);
-                    store.setState(newState);
+                if (tool && tool.ivSections) {
+                    const index = tool.ivSections.findIndex(s => s.id === ivSectionId);
+                    const newIndex = index + direction;
+                    if (newIndex >= 0 && newIndex < tool.ivSections.length) {
+                        const [item] = tool.ivSections.splice(index, 1);
+                        tool.ivSections.splice(newIndex, 0, item);
+                        store.setState(newState);
+                    }
                 }
             },
             
@@ -1139,38 +1119,20 @@
                 if (!text.trim()) return;
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                if (!tool || !tool.ivSections) return;
-                const section = tool.ivSections.find(s => s.id === ivSectionId);
+                const section = tool?.ivSections.find(s => s.id === ivSectionId);
                 if (section) {
                     section.items.push({ id: utils.uuid(), text: text.trim(), checked: true });
+                    store.setState(newState);
                 }
-                store.setState(newState);
             },
             
             removeInterventionItem(itemId, ivSectionId, toolId, sectionId) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                if (!tool || !tool.ivSections) return;
-                const section = tool.ivSections.find(s => s.id === ivSectionId);
+                const section = tool?.ivSections.find(s => s.id === ivSectionId);
                 if (section) {
                     section.items = section.items.filter(i => i.id !== itemId);
-                }
-                store.setState(newState);
-            },
-
-            handleTitleEdit(e) {
-                if (e.target.matches('[data-section-id] h2[contenteditable="true"]')) {
-                    const sectionEl = e.target.closest('[data-section-id]');
-                    const sectionId = sectionEl.dataset.sectionId;
-                    const newTitle = e.target.textContent;
-
-                    const newState = JSON.parse(JSON.stringify(store.state));
-                    const section = newState.sections.find(s => s.id === sectionId);
-                    if (section && section.title !== newTitle) {
-                        section.title = newTitle;
-                        store.setState(newState, { publish: false });
-                        renderer.renderFinalNote(store.state);
-                    }
+                    store.setState(newState);
                 }
             },
 
@@ -1191,23 +1153,25 @@
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const section = newState.sections.find(s => s.id === sectionId);
                 const toolIndex = this.findIndexById(section.tools, toolId);
-                const duplicatedTool = JSON.parse(JSON.stringify(section.tools[toolIndex]));
-                duplicatedTool.id = utils.uuid();
-                section.tools.splice(toolIndex + 1, 0, duplicatedTool);
-                store.setState(newState);
+                if(toolIndex > -1) {
+                    const duplicatedTool = JSON.parse(JSON.stringify(section.tools[toolIndex]));
+                    duplicatedTool.id = utils.uuid();
+                    section.tools.splice(toolIndex + 1, 0, duplicatedTool);
+                    store.setState(newState);
+                }
             },
 
             addShortTextField(toolId, sectionId) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                tool.fields.push({ label: '', value: '' });
+                if(tool) tool.fields.push({ label: '', value: '' });
                 store.setState(newState);
             },
 
             removeShortTextField(fieldIndex, toolId, sectionId) {
                 const newState = JSON.parse(JSON.stringify(store.state));
                 const tool = this.findToolById(newState, toolId, sectionId);
-                tool.fields.splice(fieldIndex, 1);
+                if(tool) tool.fields.splice(fieldIndex, 1);
                 store.setState(newState);
             },
             
@@ -1266,7 +1230,7 @@
             handleDragStart(e) {
                 const handle = e.target.closest('.drag-handle');
                 if (!handle) { e.preventDefault(); return; }
-                this.draggedItem = handle.closest('[data-tool-id]'); // Only tools are draggable for now
+                this.draggedItem = handle.closest('[data-tool-id]');
                 if (!this.draggedItem) { e.preventDefault(); return; }
                 setTimeout(() => this.draggedItem.classList.add('dragging'), 0);
                 e.dataTransfer.effectAllowed = 'move';
@@ -1353,16 +1317,13 @@
                     case 'Risk Safety': return { ...base, values: { si:false, hi:false, plan:false, intent:false, means: false, factors:'', protective:'', planActions:'' } };
                     case 'Signature': return { ...base, values: { name:'', license:'', supervisor:'', supervisorLicense:'' } };
                     case 'Client Information': 
-                        const defaultStartTime = { hour: '9', minute: '00', ampm: 'AM' };
-                        const defaultEndTime = { hour: '9', minute: '45', ampm: 'AM' };
                         return { 
                             ...base, 
                             values: { 
-                                name: '', dob: '', mrn: '', dos: new Date().toISOString().slice(0, 10), 
-                                startTimeHour: defaultStartTime.hour, startTimeMinute: defaultStartTime.minute, startTimeAmPm: defaultStartTime.ampm,
-                                endTimeHour: defaultEndTime.hour, endTimeMinute: defaultEndTime.minute, endTimeAmPm: defaultEndTime.ampm,
-                                startTime: this.convert12to24(defaultStartTime.hour, defaultStartTime.minute, defaultStartTime.ampm),
-                                endTime: this.convert12to24(defaultEndTime.hour, defaultEndTime.minute, defaultEndTime.ampm)
+                                name: '', dob: '', mrn: '', dos: '', 
+                                startTimeHour: '', startTimeMinute: '', startTimeAmPm: '',
+                                endTimeHour: '', endTimeMinute: '', endTimeAmPm: '',
+                                startTime: '', endTime: ''
                             } 
                         };
                     case 'Mental Status Exam': return { ...base, values: {}, customValues: {} };
