@@ -1,1 +1,1378 @@
-placeholder
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive SOAP Note Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
+    <!--
+    HOW TO USE:
+    1.  Getting Started: This is a self-contained web page. Simply open this HTML file in any modern web browser. No internet connection is needed after the page has loaded once.
+    2.  Building Your Note: The main area is divided into sections (e.g., Subjective, Objective).
+        - Add Tools: In each section, click the "+ Add Tool" button to add different components like paragraph boxes, checklists, a Mental Status Exam builder, an Intervention selector, and more.
+        - Customize: Every tool and section can be reordered by dragging the handle (::). Use the toolbar on each section or tool to collapse, remove, or change settings.
+    3.  Live Output: As you type and make changes, the "Final Note" at the bottom of the page updates in real-time. This is the note you will copy for your records.
+    4.  Productivity: Use keyboard shortcuts (Cmd/Ctrl+Shift+C to copy) to work faster.
+    5.  Saving Your Layout: Your entire layout, including all sections, tools, and content, is automatically saved in your browser's local storage. When you close and reopen the file, your work will be there.
+    6.  Import/Export: Use the buttons in the top bar to save your entire configuration (layout, tools, banks) to a JSON file for backup or to move it to another computer.
+    -->
+    <style>
+        :root {
+            --background-primary: #f7fafc;
+            --background-secondary: #ffffff;
+            --background-tertiary: #edf2f7;
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --accent-primary: #4299e1;
+            --accent-primary-hover: #2b6cb0;
+            --border-color: #e2e8f0;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --drag-over-bg: #ebf8ff;
+        }
+
+        html.dark {
+            --background-primary: #1a202c;
+            --background-secondary: #2d3748;
+            --background-tertiary: #4a5568;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --accent-primary: #63b3ed;
+            --accent-primary-hover: #4299e1;
+            --border-color: #4a5568;
+            --shadow-color: rgba(0, 0, 0, 0.4);
+            --drag-over-bg: #2c5282;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-primary);
+            color: var(--text-primary);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .drag-handle { cursor: grab; }
+        .drag-handle:active { cursor: grabbing; }
+
+        .dragging { opacity: 0.5; border: 2px dashed var(--accent-primary); }
+        .drag-over { background-color: var(--drag-over-bg) !important; box-shadow: inset 0 0 0 2px var(--accent-primary); }
+
+        .toast {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px; border-radius: 8px;
+            background-color: #2d3748; color: #f7fafc;
+            box-shadow: 0 4px 12px var(--shadow-color);
+            z-index: 100; opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+        }
+
+        .toast.show { opacity: 1; transform: translate(-50%, -10px); }
+
+        [aria-hidden="true"] { display: none !important; }
+        
+        .bullet-tool-textarea {
+            line-height: 1.75;
+        }
+
+        @media print {
+            body { background-color: white; color: black; }
+            .no-print { display: none !important; }
+            #final-note-container, #final-note-output { 
+                border: none !important; box-shadow: none !important;
+                height: auto; position: static;
+            }
+            #main-content { margin-bottom: 0; }
+            #final-note-output { white-space: pre-wrap; }
+        }
+    </style>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+    <div id="app" class="p-2 sm:p-4 lg:p-6">
+
+        <!-- Header -->
+        <header class="flex flex-wrap items-center justify-between gap-4 p-4 mb-6 bg-white dark:bg-gray-800 rounded-lg shadow no-print">
+            <h1 class="text-2xl font-bold text-blue-600 dark:text-blue-400">SOAP Note Builder</h1>
+            <div class="flex flex-wrap items-center gap-2">
+                <button id="add-section-btn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Section
+                </button>
+                <button id="import-btn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
+                    <i data-lucide="upload" class="w-4 h-4"></i> Import
+                </button>
+                <input type="file" id="import-file-input" class="hidden" accept=".json">
+                <button id="export-btn" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
+                    <i data-lucide="download" class="w-4 h-4"></i> Export
+                </button>
+                <button id="theme-toggle-btn" class="p-2 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600">
+                    <i data-lucide="sun" class="w-4 h-4 dark:hidden"></i>
+                    <i data-lucide="moon" class="hidden w-4 h-4 dark:inline"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content: Sections -->
+        <main id="main-content" class="space-y-4">
+            <!-- Sections will be rendered here by JavaScript -->
+        </main>
+
+        <!-- Final Note Output -->
+        <section id="final-note-container" class="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg mt-6 no-print">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-lg font-semibold">Final Note</h2>
+                <div class="flex items-center gap-2">
+                     <label for="pause-sync-toggle" class="flex items-center text-sm cursor-pointer">
+                         <input type="checkbox" id="pause-sync-toggle" class="w-4 h-4 mr-2 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 dark:bg-gray-700 dark:border-gray-600">
+                         Pause Sync
+                     </label>
+                    <button id="regenerate-btn" class="flex items-center gap-2 px-3 py-1 text-sm font-semibold text-white bg-green-600 rounded-md shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i> Resume
+                    </button>
+                    <button id="copy-note-btn" class="flex items-center gap-2 px-3 py-1 text-sm font-semibold text-white bg-blue-600 rounded-md shadow-sm hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+                       <i data-lucide="copy" class="w-3 h-3"></i> Copy
+                    </button>
+                    <button id="export-txt-btn" class="flex items-center gap-2 px-3 py-1 text-sm font-semibold bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
+                       <i data-lucide="file-text" class="w-3 h-3"></i> .TXT
+                    </button>
+                </div>
+            </div>
+            <textarea id="final-note-output" class="w-full h-48 md:h-64 p-3 text-sm font-mono bg-gray-100 border border-gray-300 rounded-md resize-y dark:bg-gray-900 dark:border-gray-600 dark:text-gray-300" readonly></textarea>
+        </section>
+
+    </div>
+    
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script type="module">
+        lucide.createIcons();
+
+        // --- UTILITY FUNCTIONS ---
+        const utils = {
+            uuid: () => ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)),
+            escapeHtml: (str) => String(str ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]),
+            cleanText: (text) => (text || '').trim().replace(/\n{3,}/g, '\n\n'),
+            autoPunctuate: (line) => {
+                if (!line || line.length === 0) return '';
+                const trimmed = line.trim();
+                const lastChar = trimmed.slice(-1);
+                if (/[.?!]/.test(lastChar)) return trimmed;
+                return trimmed + '.';
+            },
+            showToast: (message, duration = 3000) => {
+                const toast = document.getElementById('toast');
+                toast.textContent = message;
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), duration);
+            },
+            calculateDuration(date, start, end) {
+                const effectiveDate = date || '1970-01-01';
+                if (!start || !end) return '';
+                try {
+                    const startDateTime = new Date(`${effectiveDate}T${start}`);
+                    const endDateTime = new Date(`${effectiveDate}T${end}`);
+                    const diff = endDateTime - startDateTime;
+                    if (isNaN(diff) || diff < 0) return 'Invalid';
+                    const minutes = Math.floor(diff / 60000);
+                    return `${minutes} min`;
+                } catch (e) {
+                    return 'Invalid';
+                }
+            },
+            formatDate(dateString) {
+                if (!dateString) return 'N/A';
+                 try {
+                    const date = new Date(dateString + 'T00:00:00'); // Ensure date is parsed in local timezone
+                    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+                } catch (e) {
+                    return 'Invalid Date';
+                }
+            },
+            generateHourOptions: () => Array.from({length: 12}, (_, i) => `<option value="${i+1}">${i+1}</option>`).join(''),
+            generateMinuteOptions: () => Array.from({length: 60}, (_, i) => `<option value="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</option>`).join(''),
+        };
+
+        // --- STATE MANAGEMENT ---
+        const store = {
+            state: {},
+            listeners: new Set(),
+            subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); },
+            publish() { this.listeners.forEach(l => l(this.state)); },
+            setState(newState, options = { publish: true, save: true }) {
+                this.state = { ...this.state, ...newState };
+                if (options.save) this.saveState();
+                if (options.publish) this.publish();
+            },
+            saveState() {
+                try {
+                    localStorage.setItem('soapNoteBuilderState', JSON.stringify(this.state));
+                } catch (e) {
+                    console.error("Error saving state to localStorage", e);
+                    utils.showToast("Error: Could not save state. Storage might be full.");
+                }
+            },
+            loadState() {
+                try {
+                    const savedState = localStorage.getItem('soapNoteBuilderState');
+                    return savedState ? JSON.parse(savedState) : this.getDefaultState();
+                } catch (e) {
+                    console.error("Error loading state from localStorage", e);
+                    return this.getDefaultState();
+                }
+            },
+            getDefaultState() {
+                const createTool = (type) => app.createToolObject(type); // Use app's method
+                return {
+                    sections: [
+                        { id: utils.uuid(), title: 'Client Information', showTitleInOutput: false, tools: [createTool('Client Information')], isCollapsed: false },
+                        { id: utils.uuid(), title: 'Subjective', showTitleInOutput: true, tools: [createTool('Bulleted Notes')], isCollapsed: false },
+                        { id: utils.uuid(), title: 'Objective', showTitleInOutput: true, tools: [createTool('Bulleted Notes'), createTool('Mental Status Exam'), createTool('Interventions')], isCollapsed: false },
+                        { id: utils.uuid(), title: 'Assessment', showTitleInOutput: true, tools: [createTool('Bulleted Notes')], isCollapsed: false },
+                        { id: utils.uuid(), title: 'Plan', showTitleInOutput: true, tools: [createTool('Bulleted Notes')], isCollapsed: false }
+                    ],
+                    isSyncPaused: false,
+                    theme: localStorage.getItem('soapNoteTheme') || 'light'
+                };
+            }
+        };
+
+        // --- RENDERER (DOM Manipulation) ---
+        const renderer = {
+            hourOptions: utils.generateHourOptions(),
+            minuteOptions: utils.generateMinuteOptions(),
+            mseOptions: {
+                appearance: ['Well-groomed', 'Disheveled', 'Appropriate for age', 'Unkempt'],
+                behavior: ['Calm and cooperative', 'Agitated', 'Restless', 'Withdrawn', 'Guarded', 'Hypervigilant'],
+                speech: ['Normal rate and rhythm', 'Pressured', 'Slow', 'Slurred', 'Loud', 'Soft', 'Monotone'],
+                mood: ['Euthymic', 'Depressed', 'Anxious', 'Irritable', 'Euphoric', 'Angry', 'Expansive'],
+                affect: ['Full range', 'Appropriate to mood', 'Constricted', 'Blunted', 'Flat', 'Labile', 'Tearful'],
+                thoughtProcess: ['Linear and logical', 'Circumstantial', 'Tangential', 'Loose associations', 'Flight of ideas', 'Thought blocking'],
+                thoughtContent: ['No SI/HI', 'Obsessions', 'Delusions', 'Paranoia', 'Phobias', 'Poverty of content'],
+                perception: ['No hallucinations or delusions', 'Auditory hallucinations', 'Visual hallucinations', 'Derealization'],
+                cognition: ['Alert and oriented x4', 'Intact memory', 'Impaired concentration', 'Grossly intact'],
+                insight: ['Good', 'Fair', 'Poor', 'Limited', 'Intellectual'],
+                judgment: ['Good', 'Fair', 'Poor', 'Impulsive']
+            },
+
+            mseNormalValues: {
+                appearance: 'Well-groomed',
+                behavior: 'Calm and cooperative',
+                speech: 'Normal rate and rhythm',
+                mood: 'Euthymic',
+                affect: 'Appropriate to mood',
+                thoughtProcess: 'Linear and logical',
+                thoughtContent: 'No SI/HI',
+                perception: 'No hallucinations or delusions',
+                cognition: 'Alert and oriented x4',
+                insight: 'Good',
+                judgment: 'Good'
+            },
+
+            render(state) {
+                this.renderTheme(state.theme);
+                this.renderSections(state.sections);
+                this.renderFinalNote(state);
+                this.renderSyncControls(state.isSyncPaused);
+                lucide.createIcons();
+            },
+            
+            renderTheme(theme) {
+                if (theme === 'dark') {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+            },
+            
+            renderSyncControls(isPaused) {
+                document.getElementById('pause-sync-toggle').checked = isPaused;
+                document.getElementById('regenerate-btn').disabled = !isPaused;
+                document.getElementById('final-note-output').readOnly = !isPaused;
+            },
+
+            renderSections(sections) {
+                const mainContent = document.getElementById('main-content');
+                mainContent.innerHTML = ''; // Clear existing
+                sections.forEach((section, index) => {
+                    const sectionEl = this.createSectionElement(section, index);
+                    mainContent.appendChild(sectionEl);
+                });
+            },
+
+            createSectionElement(section, sectionIndex) {
+                const sectionEl = document.createElement('section');
+                sectionEl.className = 'p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700';
+                sectionEl.dataset.sectionId = section.id;
+                
+                const isFixedSection = ['Client Information', 'Subjective', 'Objective', 'Assessment', 'Plan'].includes(section.title);
+
+                sectionEl.innerHTML = `
+                    <div class="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-600">
+                        <div class="flex items-center gap-2">
+                            ${!isFixedSection ? `<span class="drag-handle text-gray-400 dark:text-gray-500 cursor-grab" data-drag-type="section" draggable="true"><i data-lucide="grip-vertical" class="w-5 h-5"></i></span>` : `<span class="w-5 h-5"></span>`}
+                            <h2 class="text-xl font-bold p-1 -m-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500" ${!isFixedSection ? 'contenteditable="true"' : ''}>${utils.escapeHtml(section.title)}</h2>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <button class="toggle-collapse p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Collapse/Expand Section">
+                                <i data-lucide="${section.isCollapsed ? 'chevrons-up-down' : 'chevrons-down-up'}" class="w-4 h-4"></i>
+                            </button>
+                            ${!isFixedSection && section.title !== 'Client Information' ? `
+                            <button class="toggle-title-output p-1 rounded ${section.showTitleInOutput ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400'}" title="Show Title in Final Note">
+                                <i data-lucide="${section.showTitleInOutput ? 'check-square' : 'square'}" class="w-4 h-4"></i>
+                            </button>
+                            ` : ''}
+                            ${!isFixedSection ? `
+                            <button class="remove-section p-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-gray-700" title="Remove Section">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="tool-container pt-4 space-y-3 ${section.isCollapsed ? 'hidden' : ''}"></div>
+                    <div class="mt-4 ${section.isCollapsed ? 'hidden' : ''}">
+                        <div class="relative add-tool-menu">
+                            <button class="add-tool-btn flex items-center gap-2 w-full px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 border border-dashed border-gray-400 rounded-md hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+                                <i data-lucide="plus" class="w-4 h-4"></i> Add Tool
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                const toolContainer = sectionEl.querySelector('.tool-container');
+                section.tools.forEach((tool, toolIndex) => {
+                    const toolEl = this.createToolElement(tool, sectionIndex, toolIndex);
+                    toolContainer.appendChild(toolEl);
+                });
+                return sectionEl;
+            },
+
+            createToolElement(tool, sectionIndex, toolIndex) {
+                const toolEl = document.createElement('div');
+                toolEl.className = 'p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md border border-gray-200 dark:border-gray-600 tool-card';
+                toolEl.dataset.toolId = tool.id;
+                
+                const header = document.createElement('div');
+                header.className = 'flex items-center justify-between mb-2';
+                header.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="drag-handle text-gray-400 dark:text-gray-500 cursor-grab" data-drag-type="tool" draggable="true"><i data-lucide="grip-vertical" class="w-5 h-5"></i></span>
+                        <span class="text-sm font-semibold text-gray-600 dark:text-gray-300">${tool.type.replace(/([A-Z])/g, ' $1').trim()}</span>
+                    </div>
+                    ${tool.type !== 'Client Information' ? `
+                    <div class="flex items-center gap-1">
+                        <button class="duplicate-tool p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="Duplicate Tool"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                        <button class="remove-tool p-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-gray-700" title="Remove Tool"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                    ` : ''}
+                `;
+                toolEl.appendChild(header);
+
+                const content = this.createToolContent(tool, sectionIndex, toolIndex);
+                toolEl.appendChild(content);
+                return toolEl;
+            },
+
+            createToolContent(tool) {
+                const contentEl = document.createElement('div');
+                contentEl.className = 'tool-content space-y-2';
+                
+                const inputClasses = "w-full p-2 text-sm font-sans bg-white border border-gray-300 rounded-md dark:bg-gray-800 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
+                
+                const createTitleEditor = (tool) => {
+                     return `<div class="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-900/50 rounded-md">
+                         <input type="text" class="${inputClasses}" value="${utils.escapeHtml(tool.title)}" data-prop="title" placeholder="Tool Label">
+                         <label class="flex items-center text-sm gap-1 cursor-pointer whitespace-nowrap">
+                             <input type="checkbox" data-prop="showTitleInOutput" ${tool.showTitleInOutput ? 'checked' : ''}>
+                             Show title in note
+                         </label>
+                     </div>`;
+                }
+                
+                switch (tool.type) {
+                    case 'Paragraph':
+                        contentEl.innerHTML = `
+                            ${createTitleEditor(tool)}
+                            <textarea class="${inputClasses} h-24" data-prop="text" placeholder="Enter details...">${utils.escapeHtml(tool.text)}</textarea>
+                        `;
+                        break;
+                    case 'Bulleted Notes':
+                        contentEl.innerHTML = `
+                            ${createTitleEditor(tool)}
+                            <textarea class="${inputClasses} h-24 bullet-tool-textarea" data-prop="text" placeholder="Each new line will be a bullet point...">${utils.escapeHtml(tool.text)}</textarea>
+                        `;
+                        break;
+                    case 'Short Text Fields':
+                        let fieldsHtml = tool.fields.map((field, i) => `
+                            <div class="flex items-center gap-2" data-field-index="${i}">
+                                <input type="text" class="${inputClasses} w-1/2" value="${utils.escapeHtml(field.label)}" data-prop="label" placeholder="Label">
+                                <input type="text" class="${inputClasses} w-1/2" value="${utils.escapeHtml(field.value)}" data-prop="value" placeholder="Value">
+                                <button class="remove-short-text-field p-1 text-red-500 hover:text-red-700"><i data-lucide="minus-circle" class="w-4 h-4"></i></button>
+                            </div>`).join('');
+                        contentEl.innerHTML = `
+                            ${createTitleEditor(tool)}
+                            <div class="fields-container space-y-1">${fieldsHtml}</div>
+                            <button class="add-short-text-field mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline">+ Add Field</button>
+                        `;
+                        break;
+                    case 'Interventions':
+                        const ivToolbar = `
+                            <div class="flex gap-2 mb-2">
+                                <button class="add-iv-section flex-1 px-3 py-1 text-sm bg-gray-200 dark:bg-gray-600 rounded hover:bg-gray-300">+ Add Category</button>
+                                <button class="reset-iv-tool flex-1 px-3 py-1 text-sm bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 rounded hover:bg-red-200">Reset to Defaults</button>
+                            </div>`;
+                        
+                        const ivGrid = (tool.ivSections || []).map((section, secIdx) => {
+                            const itemsHtml = section.items.map((item, itemIdx) => `
+                                <li class="flex items-center gap-2" data-item-id="${item.id}">
+                                    <input type="checkbox" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 shrink-0" ${item.checked ? 'checked' : ''}>
+                                    <div class="flex-1 p-1 -m-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700" contenteditable="true">${utils.escapeHtml(item.text)}</div>
+                                    <button class="remove-iv-item p-1 text-red-500 hover:text-red-700"><i data-lucide="x" class="w-4 h-4"></i></button>
+                                </li>`).join('');
+
+                            return `
+                                <div class="iv-section-card flex flex-col bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg" data-iv-section-id="${section.id}">
+                                    <header class="flex items-center justify-between p-2 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                                        <h4 class="font-bold flex-1 p-1 -m-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700" contenteditable="true">${utils.escapeHtml(section.title)}</h4>
+                                        <div class="flex gap-1">
+                                            <button class="move-iv-section-up p-1" ${secIdx === 0 ? 'disabled' : ''}><i data-lucide="arrow-up" class="w-4 h-4"></i></button>
+                                            <button class="move-iv-section-down p-1" ${secIdx === (tool.ivSections.length - 1) ? 'disabled' : ''}><i data-lucide="arrow-down" class="w-4 h-4"></i></button>
+                                            <button class="remove-iv-section text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                        </div>
+                                    </header>
+                                    <ul class="p-2 space-y-1 text-sm">${itemsHtml}</ul>
+                                    <div class="mt-auto p-2 border-t dark:border-gray-700 flex gap-2">
+                                        <input type="text" class="${inputClasses} add-iv-item-input" placeholder="New intervention...">
+                                        <button class="add-iv-item-btn p-2 bg-blue-500 text-white rounded hover:bg-blue-600"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                                    </div>
+                                </div>`;
+                        }).join('');
+
+                        contentEl.innerHTML = `
+                            ${ivToolbar}
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">${ivGrid}</div>
+                        `;
+                        break;
+                    case 'Risk Safety':
+                        const rs = tool.values || {};
+                        contentEl.innerHTML = `
+                        <div class="space-y-3 text-sm">
+                            <div class="font-semibold">Risk Factors</div>
+                            <div class="flex flex-wrap gap-4">
+                                <label><input type="checkbox" data-prop="si" ${rs.si ? 'checked':''}> Suicidal Ideation</label>
+                                <label><input type="checkbox" data-prop="hi" ${rs.hi ? 'checked':''}> Homicidal Ideation</label>
+                                <label><input type="checkbox" data-prop="plan" ${rs.plan ? 'checked':''}> Plan</label>
+                                <label><input type="checkbox" data-prop="intent" ${rs.intent ? 'checked':''}> Intent</label>
+                                <label><input type="checkbox" data-prop="means" ${rs.means ? 'checked':''}> Means</label>
+                            </div>
+                            <input type="text" class="${inputClasses}" value="${utils.escapeHtml(rs.factors)}" data-prop="factors" placeholder="Other risk factors...">
+                            <div class="font-semibold">Protective Factors</div>
+                            <input type="text" class="${inputClasses}" value="${utils.escapeHtml(rs.protective)}" data-prop="protective" placeholder="Protective factors...">
+                            <div class="font-semibold">Safety Plan / Actions</div>
+                            <input type="text" class="${inputClasses}" value="${utils.escapeHtml(rs.planActions)}" data-prop="planActions" placeholder="Safety plan steps taken...">
+                        </div>`;
+                        break;
+                    case 'Signature':
+                        const s = tool.values || {};
+                        contentEl.innerHTML = `
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                           <input type="text" class="${inputClasses}" value="${utils.escapeHtml(s.name)}" data-prop="name" placeholder="Clinician Name, Credentials">
+                           <input type="text" class="${inputClasses}" value="${utils.escapeHtml(s.license)}" data-prop="license" placeholder="License #">
+                           <input type="text" class="${inputClasses}" value="${utils.escapeHtml(s.supervisor)}" data-prop="supervisor" placeholder="Supervisor Name, Credentials (optional)">
+                           <input type="text" class="${inputClasses}" value="${utils.escapeHtml(s.supervisorLicense)}" data-prop="supervisorLicense" placeholder="Supervisor License # (optional)">
+                        </div>`;
+                        break;
+                    case 'Client Information':
+                        const ci = tool.values || {};
+                        const ci_duration = utils.calculateDuration(ci.dos, ci.startTime, ci.endTime);
+                        contentEl.innerHTML = `
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                            <div>
+                                <label class="font-semibold">Name</label>
+                                <input type="text" class="${inputClasses}" value="${utils.escapeHtml(ci.name)}" data-prop="name">
+                            </div>
+                            <div>
+                                <label class="font-semibold">Date of Birth</label>
+                                <input type="date" class="${inputClasses}" value="${utils.escapeHtml(ci.dob)}" data-prop="dob">
+                            </div>
+                             <div>
+                                <label class="font-semibold">MRN</label>
+                                <input type="text" class="${inputClasses}" value="${utils.escapeHtml(ci.mrn)}" data-prop="mrn">
+                            </div>
+                            <div>
+                                <label class="font-semibold">Date of Service</label>
+                                <input type="date" class="${inputClasses}" value="${utils.escapeHtml(ci.dos)}" data-prop="dos">
+                            </div>
+                            <div>
+                                <label class="font-semibold">Session Start Time</label>
+                                <div class="flex gap-1">
+                                    <select class="${inputClasses}" data-prop="startTimeHour">${this.hourOptions}</select>
+                                    <select class="${inputClasses}" data-prop="startTimeMinute">${this.minuteOptions}</select>
+                                    <select class="${inputClasses}" data-prop="startTimeAmPm"><option>AM</option><option>PM</option></select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="font-semibold">Session End Time</label>
+                                <div class="flex gap-1">
+                                    <select class="${inputClasses}" data-prop="endTimeHour">${this.hourOptions}</select>
+                                    <select class="${inputClasses}" data-prop="endTimeMinute">${this.minuteOptions}</select>
+                                    <select class="${inputClasses}" data-prop="endTimeAmPm"><option>AM</option><option>PM</option></select>
+                                </div>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="font-semibold">Session Duration</label>
+                                <span class="duration-display p-2 block bg-gray-100 dark:bg-gray-900 rounded-md">${ci_duration || 'N/A'}</span>
+                            </div>
+                        </div>`;
+                        contentEl.querySelector('[data-prop="startTimeHour"]').value = ci.startTimeHour || '9';
+                        contentEl.querySelector('[data-prop="startTimeMinute"]').value = ci.startTimeMinute || '00';
+                        contentEl.querySelector('[data-prop="startTimeAmPm"]').value = ci.startTimeAmPm || 'AM';
+                        contentEl.querySelector('[data-prop="endTimeHour"]').value = ci.endTimeHour || '9';
+                        contentEl.querySelector('[data-prop="endTimeMinute"]').value = ci.endTimeMinute || '45';
+                        contentEl.querySelector('[data-prop="endTimeAmPm"]').value = ci.endTimeAmPm || 'AM';
+                        break;
+                    case 'Mental Status Exam':
+                        const allNormalCheckboxId = `mse-all-normal-${tool.id}`;
+                        let mseHtml = `<div class="flex items-center mb-3">
+                                            <input type="checkbox" id="${allNormalCheckboxId}" class="mse-all-normal-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                                            <label for="${allNormalCheckboxId}" class="ml-2 text-sm font-medium">All Within Normal Limits</label>
+                                       </div>`;
+
+                        mseHtml += Object.entries(this.mseOptions).map(([key, options]) => {
+                            const title = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+                            const selectedOption = tool.values?.[key] || '';
+                            const customValue = tool.customValues?.[key] || '';
+                            const isCustomMode = selectedOption === 'Other...';
+
+                            const optionTags = [...options, 'Other...'].map(opt => 
+                                `<option value="${utils.escapeHtml(opt)}" ${selectedOption === opt ? 'selected' : ''}>${utils.escapeHtml(opt)}</option>`
+                            ).join('');
+
+                            return `
+                                <div class="grid grid-cols-3 gap-2 items-center text-sm">
+                                    <label class="font-semibold col-span-1">${title}:</label>
+                                    <div class="col-span-2 flex items-center gap-2">
+                                        <select class="${inputClasses} flex-grow" data-prop="${key}">
+                                            <option value="">-- Select --</option>
+                                            ${optionTags}
+                                        </select>
+                                        <input 
+                                            type="text" 
+                                            class="${inputClasses} flex-grow ${isCustomMode ? '' : 'hidden'}" 
+                                            data-prop="${key}-custom" 
+                                            value="${utils.escapeHtml(customValue)}"
+                                            placeholder="Custom entry...">
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                        contentEl.innerHTML = `<div class="space-y-1">${mseHtml}</div>`;
+                        break;
+
+                    default:
+                        contentEl.textContent = `Tool type "${tool.type}" not implemented yet.`;
+                }
+                return contentEl;
+            },
+            
+            renderFinalNote(state) {
+                if (state.isSyncPaused) return;
+
+                const finalNoteOutput = document.getElementById('final-note-output');
+                let output = [];
+
+                state.sections.forEach(section => {
+                    let sectionContent = [];
+                    section.tools.forEach(tool => {
+                        const toolOutput = this.generateToolOutput(tool);
+                        if (toolOutput) sectionContent.push(toolOutput);
+                    });
+
+                    if (sectionContent.length > 0) {
+                        if (section.showTitleInOutput) {
+                            let titleText = section.title;
+                            const soapHeaders = ['Subjective', 'Objective', 'Assessment', 'Plan'];
+                            if (soapHeaders.find(h => h.toLowerCase() === section.title.toLowerCase())) {
+                                titleText = section.title.toUpperCase();
+                            }
+                            output.push(`${titleText}:`);
+                        }
+                        output.push(sectionContent.join('\n\n'));
+                    }
+                });
+
+                finalNoteOutput.value = output.join('\n\n');
+            },
+
+            generateToolOutput(tool) {
+                let toolOutputParts = [];
+                if (tool.showTitleInOutput && tool.title) {
+                    toolOutputParts.push(`${tool.title.trim()}:`);
+                }
+
+                let content = '';
+                switch (tool.type) {
+                    case 'Paragraph':
+                        content = (tool.text || '').trim();
+                        break;
+                    case 'Bulleted Notes':
+                        // The text in the state already contains bullets, so we just clean it up.
+                        content = (tool.text || '').split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line && line !== '•') // Filter out empty lines or lines with only a bullet
+                            .join('\n');
+                        break;
+                    case 'Short Text Fields':
+                        const filledFields = (tool.fields || []).filter(f => f.label.trim() && f.value.trim());
+                        if (filledFields.length > 0) {
+                            content = filledFields.map(f => `${f.label.trim()}: ${f.value.trim()}`).join('; ');
+                        }
+                        break;
+                    case 'Interventions':
+                        const interventionContent = (tool.ivSections || [])
+                            .map(section => {
+                                const checkedItems = section.items.filter(item => item.checked && item.text.trim());
+                                if (checkedItems.length === 0) return '';
+                                // Format with bullets for the final note
+                                const itemsText = checkedItems.map(item => `• ${item.text.trim()}`).join('\n');
+                                return `${section.title}:\n${itemsText}`;
+                            })
+                            .filter(Boolean)
+                            .join('\n\n');
+
+                        if (interventionContent) {
+                            content = `Interventions:\n${interventionContent}`;
+                        }
+                        break;
+                    case 'Risk Safety':
+                        const rs = tool.values || {};
+                        let parts = [];
+                        if (rs.si || rs.hi) {
+                            let riskStr = "Client reported";
+                            if (rs.si) riskStr += " suicidal ideation";
+                            if (rs.si && rs.hi) riskStr += " and";
+                            if (rs.hi) riskStr += " homicidal ideation";
+                            riskStr += (rs.plan ? " with a plan" : "") + (rs.intent ? " and intent" : (rs.plan ? " but denied intent" : "")) + (rs.means ? " and available means" : "") + ".";
+                            parts.push(riskStr);
+                        } else {
+                            parts.push("Client denied SI/HI.");
+                        }
+                        if (rs.factors) parts.push(`Other risk factors include: ${rs.factors}.`);
+                        if (rs.protective) parts.push(`Protective factors include: ${rs.protective}.`);
+                        if (rs.planActions) parts.push(`Safety plan actions taken: ${rs.planActions}.`);
+                        content = parts.map(utils.autoPunctuate).join(' ');
+                        break;
+                    case 'Signature':
+                        const s = tool.values || {};
+                        if (s.name) {
+                            let sigParts = [`${s.name}, ${s.license || 'N/A'}`];
+                            if (s.supervisor) sigParts.push(`Supervisor: ${s.supervisor}, ${s.supervisorLicense || 'N/A'}`);
+                            content = sigParts.join('\n');
+                        }
+                        break;
+                    case 'Client Information':
+                        const ci = tool.values || {};
+                        const infoParts = [];
+                        if (ci.name) infoParts.push(`Client Name: ${ci.name}`);
+                        if (ci.dob) infoParts.push(`DOB: ${ci.dob}`);
+                        if (ci.mrn) infoParts.push(`MRN: ${ci.mrn}`);
+                        if (ci.dos) infoParts.push(`Date of Service: ${ci.dos}`);
+                        if (ci.startTime && ci.endTime) {
+                            const duration = utils.calculateDuration(ci.dos, ci.startTime, ci.endTime);
+                            const formatTime = (timeStr) => {
+                                if (!timeStr) return '';
+                                const [hours, minutes] = timeStr.split(':');
+                                const d = new Date();
+                                d.setHours(parseInt(hours, 10), parseInt(minutes, 10));
+                                return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                            };
+                            infoParts.push(`Session Time: ${formatTime(ci.startTime)} - ${formatTime(ci.endTime)} (${duration})`);
+                        }
+                        content = infoParts.join('; ');
+                        break;
+                    case 'Mental Status Exam':
+                        const filledMSE = Object.keys(renderer.mseOptions)
+                            .map(key => {
+                                const selected = tool.values?.[key];
+                                if (!selected) return null;
+                                const value = selected === 'Other...' 
+                                    ? (tool.customValues?.[key] || '').trim()
+                                    : selected;
+                                if (!value) return null;
+                                const title = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+                                return `• ${title}: ${value}`;
+                            })
+                            .filter(Boolean);
+                        if (filledMSE.length > 0) {
+                            content = `Mental Status Exam:\n${filledMSE.join('\n')}`;
+                        }
+                        break;
+                }
+
+                if (content) {
+                    toolOutputParts.push(content);
+                }
+
+                return toolOutputParts.join('\n');
+            },
+            
+            renderToolMenu(buttonEl, sectionIndex) {
+                const existingMenu = document.querySelector('.tool-dropdown-menu');
+                if (existingMenu) existingMenu.remove();
+
+                const toolTypes = ['Paragraph', 'Bulleted Notes', 'Short Text Fields', 'Mental Status Exam', 'Interventions', 'Risk Safety', 'Signature'];
+                
+                const menu = document.createElement('div');
+                menu.className = 'tool-dropdown-menu absolute z-20 w-56 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg';
+                
+                toolTypes.forEach(type => {
+                    const item = document.createElement('a');
+                    item.href = '#';
+                    item.className = 'block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700';
+                    item.textContent = type.replace(/([A-Z])/g, ' $1').trim();
+                    item.dataset.toolType = type;
+                    item.dataset.sectionIndex = sectionIndex;
+                    menu.appendChild(item);
+                });
+                
+                buttonEl.parentElement.appendChild(menu);
+                
+                const closeMenu = (e) => {
+                    if (!menu.contains(e.target) && e.target !== buttonEl) {
+                        menu.remove();
+                        document.removeEventListener('click', closeMenu, true);
+                    }
+                };
+                setTimeout(() => document.addEventListener('click', closeMenu, true), 0);
+            }
+        };
+
+        // --- EVENT HANDLERS & LOGIC ---
+        const app = {
+            draggedItem: null,
+            lastFocusedElement: null,
+
+            init() {
+                const initialState = store.loadState();
+                store.setState(initialState, { publish: false, save: false });
+                store.subscribe(renderer.render.bind(renderer));
+                this.attachEventListeners();
+                store.publish();
+            },
+
+            attachEventListeners() {
+                const mainContent = document.getElementById('main-content');
+                mainContent.addEventListener('input', this.handleInput.bind(this));
+                mainContent.addEventListener('change', this.handleInput.bind(this)); // For checkboxes/selects
+                mainContent.addEventListener('click', this.handleClick.bind(this));
+                mainContent.addEventListener('focusin', e => { this.lastFocusedElement = e.target; });
+                mainContent.addEventListener('focusout', this.handleBlur.bind(this));
+                
+                mainContent.addEventListener('keydown', (e) => {
+                    const toolEl = e.target.closest('[data-tool-id]');
+                    if (!toolEl) return;
+                    
+                    // Intervention: Add item on Enter
+                    if (e.key === 'Enter' && e.target.classList.contains('add-iv-item-input')) {
+                        e.preventDefault();
+                        e.target.nextElementSibling.click(); // Click the '+' button
+                    }
+
+                    // Bulleted Notes: Add new bullet on Enter
+                    if (e.target.matches(".bullet-tool-textarea")) {
+                        const sectionEl = toolEl.closest('[data-section-id]');
+                        const tool = this.findToolById(store.state, toolEl.dataset.toolId, sectionEl.dataset.sectionId);
+
+                        if (tool && tool.type === 'Bulleted Notes') {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const target = e.target;
+                                const start = target.selectionStart;
+                                const end = target.selectionEnd;
+                                const value = target.value;
+                                target.value = value.substring(0, start) + '\n• ' + value.substring(end);
+                                target.selectionStart = target.selectionEnd = start + 3; // "• " is 3 chars
+                                target.dispatchEvent(new Event('input', { bubbles: true })); // Trigger update
+                            }
+                        }
+                    }
+
+                    // Save contenteditable on Enter
+                    if (e.target.isContentEditable && e.key === 'Enter') {
+                        e.preventDefault(); // Prevent new line
+                        e.target.blur();    // Trigger focusout to save
+                    }
+                });
+                
+                // D&D
+                mainContent.addEventListener('dragstart', this.handleDragStart.bind(this));
+                mainContent.addEventListener('dragover', this.handleDragOver.bind(this));
+                mainContent.addEventListener('dragleave', this.handleDragLeave.bind(this));
+                mainContent.addEventListener('drop', this.handleDrop.bind(this));
+                mainContent.addEventListener('dragend', this.handleDragEnd.bind(this));
+
+                // Header
+                document.getElementById('add-section-btn').addEventListener('click', this.addSection.bind(this));
+                document.getElementById('theme-toggle-btn').addEventListener('click', this.toggleTheme.bind(this));
+                document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file-input').click());
+                document.getElementById('import-file-input').addEventListener('change', this.importConfig.bind(this));
+                document.getElementById('export-btn').addEventListener('click', this.exportConfig.bind(this));
+
+                // Final Note
+                document.getElementById('pause-sync-toggle').addEventListener('change', this.toggleSync.bind(this));
+                document.getElementById('final-note-output').addEventListener('input', this.handleManualNoteEdit.bind(this));
+                document.getElementById('regenerate-btn').addEventListener('click', this.regenerateNote.bind(this));
+                document.getElementById('copy-note-btn').addEventListener('click', this.copyNote.bind(this));
+                document.getElementById('export-txt-btn').addEventListener('click', this.exportTxt.bind(this));
+            },
+            
+            handleBlur(e) {
+                this.handleTitleEdit(e); // Handle section titles
+                if (e.target.closest('.iv-section-card')) {
+                    this.handleInterventionEdit(e); // Handle intervention edits
+                }
+            },
+
+            handleClick(e) {
+                const button = e.target.closest('button');
+                if (!button) {
+                    const menuItem = e.target.closest('.tool-dropdown-menu a');
+                     if (menuItem) {
+                        e.preventDefault();
+                        this.addTool(menuItem.dataset.toolType, parseInt(menuItem.dataset.sectionIndex));
+                        menuItem.closest('.tool-dropdown-menu').remove();
+                    }
+                    return;
+                };
+
+                const sectionEl = button.closest('[data-section-id]');
+                const toolEl = button.closest('[data-tool-id]');
+
+                // Section controls
+                if (button.classList.contains('remove-section') && sectionEl) this.removeSection(sectionEl.dataset.sectionId);
+                if (button.classList.contains('toggle-collapse') && sectionEl) this.toggleSectionCollapse(sectionEl.dataset.sectionId);
+                if (button.classList.contains('toggle-title-output') && sectionEl) this.toggleSectionTitleOutput(sectionEl.dataset.sectionId);
+
+                // Add tool menu
+                if (button.classList.contains('add-tool-btn') && sectionEl) {
+                    const sectionIndex = this.findIndexById(store.state.sections, sectionEl.dataset.sectionId);
+                    renderer.renderToolMenu(button, sectionIndex);
+                }
+                
+                // Tool controls
+                if (toolEl && sectionEl) {
+                    const toolId = toolEl.dataset.toolId;
+                    const sectionId = sectionEl.dataset.sectionId;
+                    if (button.classList.contains('remove-tool')) this.removeTool(toolId, sectionId);
+                    if (button.classList.contains('duplicate-tool')) this.duplicateTool(toolId, sectionId);
+                    if (button.classList.contains('add-short-text-field')) this.addShortTextField(toolId, sectionId);
+                    if (button.classList.contains('remove-short-text-field')) {
+                        const fieldIndex = button.closest('[data-field-index]').dataset.fieldIndex;
+                        this.removeShortTextField(fieldIndex, toolId, sectionId);
+                    }
+                    if (button.classList.contains('add-iv-section')) this.addInterventionSection(toolId, sectionId);
+                    if (button.classList.contains('reset-iv-tool')) this.resetInterventions(toolId, sectionId);
+                }
+
+                // Intervention-specific controls (require more specific element context)
+                const ivSectionCard = button.closest('.iv-section-card');
+                if (ivSectionCard && toolEl && sectionEl) {
+                    const toolId = toolEl.dataset.toolId;
+                    const sectionId = sectionEl.dataset.sectionId;
+                    const ivSectionId = ivSectionCard.dataset.ivSectionId;
+                    
+                    if (button.classList.contains('remove-iv-section')) this.removeInterventionSection(ivSectionId, toolId, sectionId);
+                    if (button.classList.contains('move-iv-section-up')) this.moveInterventionSection(ivSectionId, toolId, sectionId, -1);
+                    if (button.classList.contains('move-iv-section-down')) this.moveInterventionSection(ivSectionId, toolId, sectionId, 1);
+                    if (button.classList.contains('add-iv-item-btn')) {
+                        const input = button.previousElementSibling;
+                        this.addInterventionItem(ivSectionId, toolId, sectionId, input.value);
+                        input.value = ''; // Clear input after adding
+                    }
+                    
+                    const ivItem = button.closest('li[data-item-id]');
+                    if (ivItem && button.classList.contains('remove-iv-item')) {
+                        this.removeInterventionItem(ivItem.dataset.itemId, ivSectionId, toolId, sectionId);
+                    }
+                }
+            },
+            
+            convert12to24(hour, minute, ampm) {
+                hour = parseInt(hour, 10);
+                minute = String(minute).padStart(2, '0');
+                if (ampm === 'PM' && hour !== 12) hour += 12;
+                if (ampm === 'AM' && hour === 12) hour = 0;
+                return `${String(hour).padStart(2, '0')}:${minute}`;
+            },
+            
+            handleInput(e) {
+                if (e.target.classList.contains('mse-all-normal-checkbox')) {
+                    const toolEl = e.target.closest('[data-tool-id]');
+                    const sectionEl = toolEl.closest('[data-section-id]');
+                    if (e.target.checked) this.setMseToNormal(toolEl.dataset.toolId, sectionEl.dataset.sectionId);
+                    return;
+                }
+
+                const toolEl = e.target.closest('[data-tool-id]');
+                if (!toolEl) return;
+                
+                const sectionEl = toolEl.closest('[data-section-id]'); 
+                if (!sectionEl) return;
+                
+                const sectionIndex = this.findIndexById(store.state.sections, sectionEl.dataset.sectionId);
+                if (sectionIndex === -1) return;
+                
+                const toolIndex = this.findIndexById(store.state.sections[sectionIndex].tools, toolEl.dataset.toolId);
+                if (toolIndex === -1) return;
+                
+                const isSimpleInput = e.type === 'input' && (e.target.tagName === 'TEXTAREA' || (e.target.tagName === 'INPUT' && ['text', 'date'].includes(e.target.type)));
+
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = newState.sections[sectionIndex].tools[toolIndex];
+                const prop = e.target.dataset.prop;
+
+                switch(tool.type) {
+                    case 'Paragraph':
+                    case 'Bulleted Notes':
+                    case 'Short Text Fields':
+                        if (prop === 'title') tool.title = e.target.value;
+                        else if (prop === 'showTitleInOutput') tool.showTitleInOutput = e.target.checked;
+                        else if (tool.type === 'Bulleted Notes' || tool.type === 'Paragraph') {
+                            tool.text = e.target.value;
+                        } else if (tool.type === 'Short Text Fields') {
+                            const fieldIndex = parseInt(e.target.closest('[data-field-index]').dataset.fieldIndex);
+                            tool.fields[fieldIndex][prop] = e.target.value;
+                        }
+                        break;
+                    case 'Interventions':
+                        if (e.target.matches('input[type="checkbox"]')) {
+                            const itemEl = e.target.closest('[data-item-id]');
+                            const sectionCardEl = e.target.closest('.iv-section-card[data-iv-section-id]');
+                            if(itemEl && sectionCardEl && tool.ivSections) {
+                                const ivSection = tool.ivSections.find(s => s.id === sectionCardEl.dataset.ivSectionId);
+                                if(ivSection) {
+                                    const item = ivSection.items.find(i => i.id === itemEl.dataset.itemId);
+                                    if(item) item.checked = e.target.checked;
+                                }
+                            }
+                        }
+                        break;
+                    case 'Risk Safety':
+                        if (!tool.values) tool.values = {};
+                        if(e.target.type === 'checkbox') tool.values[prop] = e.target.checked;
+                        else tool.values[prop] = e.target.value;
+                        break;
+                    case 'Client Information':
+                        if (!tool.values) tool.values = {};
+                        tool.values[prop] = e.target.value;
+                        tool.values.startTime = this.convert12to24(tool.values.startTimeHour, tool.values.startTimeMinute, tool.values.startTimeAmPm);
+                        tool.values.endTime = this.convert12to24(tool.values.endTimeHour, tool.values.endTimeMinute, tool.values.endTimeAmPm);
+                        break;
+                    case 'Signature':
+                        if (!tool.values) tool.values = {};
+                        tool.values[prop] = e.target.value;
+                        break;
+                    case 'Mental Status Exam':
+                        if (!tool.values) tool.values = {};
+                        if (!tool.customValues) tool.customValues = {};
+                        if (prop.endsWith('-custom')) {
+                            const baseProp = prop.replace('-custom', '');
+                            tool.customValues[baseProp] = e.target.value;
+                        } else if (e.target.tagName === 'SELECT') {
+                            tool.values[prop] = e.target.value;
+                        }
+                        break;
+                    default:
+                        tool[prop] = e.target.value;
+                }
+                
+                if (isSimpleInput || e.target.tagName === 'SELECT' || e.target.type === 'checkbox') {
+                    store.setState(newState, { publish: false });
+                    if (tool.type === 'Client Information') {
+                         const durationEl = toolEl.querySelector('.duration-display');
+                         if (durationEl) {
+                             durationEl.textContent = utils.calculateDuration(tool.values.dos, tool.values.startTime, tool.values.endTime) || 'N/A';
+                         }
+                    }
+                    renderer.renderFinalNote(store.state);
+                } else {
+                    store.setState(newState);
+                }
+            },
+
+            addSection() {
+                const title = "New Section";
+                const newState = { ...store.state };
+                newState.sections.push({ id: utils.uuid(), title: title.trim(), showTitleInOutput: true, tools: [], isCollapsed: false });
+                store.setState(newState);
+            },
+            
+            removeSection(sectionId) {
+                // Removed confirm() call for better user experience in iframe environments
+                const newState = { ...store.state };
+                newState.sections = newState.sections.filter(s => s.id !== sectionId);
+                store.setState(newState);
+            },
+            
+            toggleSectionCollapse(sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const section = newState.sections.find(s => s.id === sectionId);
+                section.isCollapsed = !section.isCollapsed;
+                store.setState(newState);
+            },
+
+            setMseToNormal(toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (tool && tool.type === 'Mental Status Exam') {
+                    tool.values = { ...renderer.mseNormalValues };
+                    tool.customValues = {};
+                    store.setState(newState);
+                    setTimeout(() => {
+                        const checkbox = document.getElementById(`mse-all-normal-${toolId}`);
+                        if(checkbox) checkbox.checked = false;
+                    }, 0);
+                }
+            },
+
+            toggleSectionTitleOutput(sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const section = newState.sections.find(s => s.id === sectionId);
+                section.showTitleInOutput = !section.showTitleInOutput;
+                store.setState(newState);
+            },
+            
+            handleInterventionEdit(e) {
+                const editableEl = e.target;
+                const ivSectionCard = editableEl.closest('.iv-section-card[data-iv-section-id]');
+                if (!ivSectionCard) return;
+
+                const toolEl = ivSectionCard.closest('[data-tool-id]');
+                if (!toolEl) return;
+                
+                const mainSectionEl = toolEl.closest('[data-section-id]');
+                if (!mainSectionEl) return;
+
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolEl.dataset.toolId, mainSectionEl.dataset.sectionId);
+                if (!tool || tool.type !== 'Interventions' || !tool.ivSections) return;
+
+                const ivSectionId = ivSectionCard.dataset.ivSectionId;
+                const ivSection = tool.ivSections.find(s => s.id === ivSectionId);
+                if (!ivSection) return;
+
+                // Was it the title H4 that was edited?
+                if (editableEl.matches('h4')) {
+                    const newTitle = editableEl.textContent.trim();
+                    if (ivSection.title !== newTitle) {
+                        ivSection.title = newTitle;
+                        store.setState(newState);
+                    }
+                    return; // Done
+                }
+
+                // Was it an item DIV that was edited?
+                const itemLi = editableEl.closest('li[data-item-id]');
+                if (itemLi) {
+                    const itemId = itemLi.dataset.itemId;
+                    const item = ivSection.items.find(i => i.id === itemId);
+                    if (item) {
+                        const newText = editableEl.textContent.trim();
+                        if (item.text !== newText) {
+                            item.text = newText;
+                            store.setState(newState);
+                        }
+                    }
+                    return; // Done
+                }
+            },
+            
+            addInterventionSection(toolId, sectionId) {
+                const title = "New Category"; // Removed prompt
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (!tool) return;
+                if (!tool.ivSections) tool.ivSections = [];
+                tool.ivSections.push({ id: utils.uuid(), title, items: [] });
+                store.setState(newState);
+            },
+
+            resetInterventions(toolId, sectionId) {
+                // Removed confirm()
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (!tool) return;
+                const defaultTool = this.createToolObject('Interventions');
+                tool.ivSections = defaultTool.ivSections;
+                store.setState(newState);
+            },
+
+            removeInterventionSection(ivSectionId, toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (!tool || !tool.ivSections) return;
+                tool.ivSections = tool.ivSections.filter(s => s.id !== ivSectionId);
+                store.setState(newState);
+            },
+            
+            moveInterventionSection(ivSectionId, toolId, sectionId, direction) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (!tool || !tool.ivSections) return;
+                const index = tool.ivSections.findIndex(s => s.id === ivSectionId);
+                const newIndex = index + direction;
+                if (newIndex >= 0 && newIndex < tool.ivSections.length) {
+                    const [item] = tool.ivSections.splice(index, 1);
+                    tool.ivSections.splice(newIndex, 0, item);
+                    store.setState(newState);
+                }
+            },
+            
+            addInterventionItem(ivSectionId, toolId, sectionId, text) {
+                if (!text.trim()) return;
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (!tool || !tool.ivSections) return;
+                const section = tool.ivSections.find(s => s.id === ivSectionId);
+                if (section) {
+                    section.items.push({ id: utils.uuid(), text: text.trim(), checked: true });
+                }
+                store.setState(newState);
+            },
+            
+            removeInterventionItem(itemId, ivSectionId, toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                if (!tool || !tool.ivSections) return;
+                const section = tool.ivSections.find(s => s.id === ivSectionId);
+                if (section) {
+                    section.items = section.items.filter(i => i.id !== itemId);
+                }
+                store.setState(newState);
+            },
+
+            handleTitleEdit(e) {
+                if (e.target.matches('[data-section-id] h2[contenteditable="true"]')) {
+                    const sectionEl = e.target.closest('[data-section-id]');
+                    const sectionId = sectionEl.dataset.sectionId;
+                    const newTitle = e.target.textContent;
+
+                    const newState = JSON.parse(JSON.stringify(store.state));
+                    const section = newState.sections.find(s => s.id === sectionId);
+                    if (section && section.title !== newTitle) {
+                        section.title = newTitle;
+                        store.setState(newState, { publish: false });
+                        renderer.renderFinalNote(store.state);
+                    }
+                }
+            },
+
+            addTool(type, sectionIndex) {
+                const newState = { ...store.state };
+                newState.sections[sectionIndex].tools.push(this.createToolObject(type));
+                store.setState(newState);
+            },
+            
+            removeTool(toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const section = newState.sections.find(s => s.id === sectionId);
+                if(section) section.tools = section.tools.filter(t => t.id !== toolId);
+                store.setState(newState);
+            },
+            
+            duplicateTool(toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const section = newState.sections.find(s => s.id === sectionId);
+                const toolIndex = this.findIndexById(section.tools, toolId);
+                const duplicatedTool = JSON.parse(JSON.stringify(section.tools[toolIndex]));
+                duplicatedTool.id = utils.uuid();
+                section.tools.splice(toolIndex + 1, 0, duplicatedTool);
+                store.setState(newState);
+            },
+
+            addShortTextField(toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                tool.fields.push({ label: '', value: '' });
+                store.setState(newState);
+            },
+
+            removeShortTextField(fieldIndex, toolId, sectionId) {
+                const newState = JSON.parse(JSON.stringify(store.state));
+                const tool = this.findToolById(newState, toolId, sectionId);
+                tool.fields.splice(fieldIndex, 1);
+                store.setState(newState);
+            },
+            
+            toggleTheme() {
+                const newTheme = store.state.theme === 'light' ? 'dark' : 'light';
+                localStorage.setItem('soapNoteTheme', newTheme);
+                store.setState({ ...store.state, theme: newTheme });
+            },
+
+            importConfig(e) {
+                const file = e.target.files[0]; if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedState = JSON.parse(event.target.result);
+                        if (importedState.sections) {
+                            store.setState(importedState);
+                            utils.showToast("Configuration imported!");
+                        } else { throw new Error("Invalid config file."); }
+                    } catch (err) { utils.showToast("Error: Could not import file."); }
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+            },
+
+            exportConfig() {
+                const dataStr = JSON.stringify(store.state, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `soap-note-config-${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+            },
+
+            toggleSync(e) { store.setState({ ...store.state, isSyncPaused: e.target.checked }); },
+            handleManualNoteEdit() { if (!store.state.isSyncPaused) store.setState({ ...store.state, isSyncPaused: true }); },
+            regenerateNote() { if(store.state.isSyncPaused) store.setState({ ...store.state, isSyncPaused: false }); else store.publish(); },
+            copyNote() {
+                navigator.clipboard.writeText(document.getElementById('final-note-output').value)
+                    .then(() => utils.showToast("Note copied!"))
+                    .catch(() => utils.showToast("Failed to copy."));
+            },
+            exportTxt() {
+                const noteText = document.getElementById('final-note-output').value;
+                const dataBlob = new Blob([noteText], { type: 'text/plain' });
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `soap-note-${new Date().toISOString().split('T')[0]}.txt`;
+                link.click();
+                URL.revokeObjectURL(url);
+            },
+
+            handleDragStart(e) {
+                const handle = e.target.closest('.drag-handle');
+                if (!handle) { e.preventDefault(); return; }
+                this.draggedItem = handle.closest('[data-tool-id]'); // Only tools are draggable for now
+                if (!this.draggedItem) { e.preventDefault(); return; }
+                setTimeout(() => this.draggedItem.classList.add('dragging'), 0);
+                e.dataTransfer.effectAllowed = 'move';
+            },
+            handleDragOver(e) {
+                e.preventDefault();
+                const target = this.getDragTarget(e);
+                if (!target) return;
+                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                if (target.element) target.element.classList.add('drag-over');
+            },
+            handleDragLeave(e) { e.target.closest('.drag-over')?.classList.remove('drag-over'); },
+            handleDrop(e) {
+                e.preventDefault();
+                if (!this.draggedItem) return;
+                const target = this.getDragTarget(e);
+                
+                if (!target || (target.element && target.element === this.draggedItem)) return;
+                
+                const newState = JSON.parse(JSON.stringify(store.state));
+                
+                const fromSectionEl = this.draggedItem.closest('[data-section-id]');
+                const toContainer = e.target.closest('.tool-container');
+                if (!fromSectionEl || !toContainer) return;
+                const toSectionEl = toContainer.closest('[data-section-id]');
+                if (!toSectionEl) return;
+
+                const fromSectionIdx = this.findIndexById(newState.sections, fromSectionEl.dataset.sectionId);
+                const toSectionIdx = this.findIndexById(newState.sections, toSectionEl.dataset.sectionId);
+                const fromToolIdx = this.findIndexById(newState.sections[fromSectionIdx].tools, this.draggedItem.dataset.toolId);
+                
+                if(fromSectionIdx === -1 || toSectionIdx === -1 || fromToolIdx === -1) return;
+
+                const [moved] = newState.sections[fromSectionIdx].tools.splice(fromToolIdx, 1);
+                
+                const targetToolId = target.element ? target.element.dataset.toolId : undefined;
+                let toToolIdx;
+                
+                if(targetToolId) {
+                   toToolIdx = this.findIndexById(newState.sections[toSectionIdx].tools, targetToolId);
+                } else {
+                   toToolIdx = newState.sections[toSectionIdx].tools.length;
+                }
+                
+                newState.sections[toSectionIdx].tools.splice(toToolIdx, 0, moved);
+                
+                store.setState(newState);
+            },
+            handleDragEnd() {
+                if (this.draggedItem) this.draggedItem.classList.remove('dragging');
+                document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+                this.draggedItem = null;
+            },
+            getDragTarget(e) {
+                const selector = '.tool-card';
+                const container = e.target.closest('.tool-container');
+                if (!container) return null;
+                const siblings = [...container.querySelectorAll(`${selector}:not(.dragging)`)];
+                const nextSibling = siblings.find(sibling => e.clientY <= sibling.offsetTop + sibling.offsetHeight / 2);
+                return { element: nextSibling || null }; // Return null if no element to drop on, signifies end of list
+            },
+
+            findIndexById: (arr, id) => arr.findIndex(item => item.id === id),
+            findToolById: (state, toolId, sectionId) => state.sections.find(s => s.id === sectionId)?.tools.find(t => t.id === toolId),
+            
+            createToolObject(type) {
+                const base = { id: utils.uuid(), type };
+                switch (type) {
+                    case 'Paragraph': return { ...base, title: 'Paragraph', showTitleInOutput: false, text: '' };
+                    case 'Bulleted Notes': return { ...base, title: 'Bulleted Notes', showTitleInOutput: false, text: '• ' };
+                    case 'Short Text Fields': return { ...base, title: 'Details', showTitleInOutput: false, fields: [{ label: '', value: '' }] };
+                    case 'Interventions': return { ...base, ivSections: [
+                        { id: utils.uuid(), title: 'Psychodynamic', items: [
+                          { id: utils.uuid(), text: 'Interpretation of unconscious themes', checked: false }, { id: utils.uuid(), text: 'Explore transference/countertransference', checked: false }, { id: utils.uuid(), text: 'Identify recurring patterns', checked: false }
+                        ]},
+                        { id: utils.uuid(), title: 'CBT', items: [
+                          { id: utils.uuid(), text: 'Cognitive restructuring', checked: false }, { id: utils.uuid(), text: 'Behavioral activation', checked: false }, { id: utils.uuid(), text: 'Mindfulness skills', checked: false }
+                        ]},
+                        { id: utils.uuid(), title: 'Person-Centered', items: [
+                          { id: utils.uuid(), text: 'Empathy', checked: false }, { id: utils.uuid(), text: 'Active / reflective listening', checked: false }, { id: utils.uuid(), text: 'Unconditional positive regard', checked: false }
+                        ]},
+                        { id: utils.uuid(), title: 'Custom Interventions', items: [] }
+                    ]};
+                    case 'Risk Safety': return { ...base, values: { si:false, hi:false, plan:false, intent:false, means: false, factors:'', protective:'', planActions:'' } };
+                    case 'Signature': return { ...base, values: { name:'', license:'', supervisor:'', supervisorLicense:'' } };
+                    case 'Client Information': 
+                        const defaultStartTime = { hour: '9', minute: '00', ampm: 'AM' };
+                        const defaultEndTime = { hour: '9', minute: '45', ampm: 'AM' };
+                        return { 
+                            ...base, 
+                            values: { 
+                                name: '', dob: '', mrn: '', dos: new Date().toISOString().slice(0, 10), 
+                                startTimeHour: defaultStartTime.hour, startTimeMinute: defaultStartTime.minute, startTimeAmPm: defaultStartTime.ampm,
+                                endTimeHour: defaultEndTime.hour, endTimeMinute: defaultEndTime.minute, endTimeAmPm: defaultEndTime.ampm,
+                                startTime: this.convert12to24(defaultStartTime.hour, defaultStartTime.minute, defaultStartTime.ampm),
+                                endTime: this.convert12to24(defaultEndTime.hour, defaultEndTime.minute, defaultEndTime.ampm)
+                            } 
+                        };
+                    case 'Mental Status Exam': return { ...base, values: {}, customValues: {} };
+                    default: return { ...base };
+                }
+            },
+        };
+
+        app.init();
+    </script>
+</body>
+</html>
+
